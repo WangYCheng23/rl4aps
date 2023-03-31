@@ -1,0 +1,14 @@
+min_jobs: 100
+max_jobs: 1500
+moulds_num: 234
+min_machines: 90
+max_machines: 100
+min_corr_moulds: 1
+max_corr_moulds: 14
+min_corr_machines: 1
+max_corr_machines: 22
+
+Ptime_coefficient: 105
+Jcolor_coefficient: 53
+Mtypes_coefficient: 511
+Mcolor_coefficient: 53
