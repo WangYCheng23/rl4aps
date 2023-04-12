@@ -99,6 +99,8 @@ class JSSPEnv(gymnasium.Env):
 
         Avg_Complete_Machines = np.mean(self.complete_time_endMh)
         
+        # 机器平均利用率, 机器的使用率标准差, 模具平均利用率, 模具的使用率标准差, 平均工件工序完成率, 工件工序完成率标准差
+        # 未完成工件的预估迟延率, 实际的迟到率, 机器换模率, 模具换模率
         return Avg_Utlization_Mh, Std_Utlization_Mh, Avg_Utlization_Md, Std_Utlization_Md, Avg_Complete_Jobs, Std_Complete_Jobs
 
     def step(self, action: np.ndarray):
@@ -118,11 +120,11 @@ class JSSPEnv(gymnasium.Env):
         """
         self.jobs_num, self.moulds_num, self.machines_num, self.processing_time, self.job_arrive_list, self.job_delivery_list, \
             self.job_colors, self.moulds_types, self.machine_init_moulds, self.machine_init_colors = self.instance_generator()
-        self.complete_time_endMh = np.zeros(self.machines_num)
-        self.utilization_Mh = np.zeros(self.machines_num)
-        self.complete_time_endMd = np.zeros(self.moulds_num)
-        self.utilization_Md = np.zeros(self.moulds_num)
-        self.complete_procedures_J = np.zeros(self.jobs_num)
+        self.complete_time_endMh = np.zeros(self.machines_num)  #各机器最后一道工序完工时间
+        self.utilization_Mh = np.zeros(self.machines_num)   #机器利用率
+        self.complete_time_endMd = np.zeros(self.moulds_num)    #各模具最后一道工序完工时间
+        self.utilization_Md = np.zeros(self.moulds_num) #模具利用率
+        self.complete_procedures_J = np.zeros(self.jobs_num)    #各工件的已加工工序数列表
 
         self.jobs = [Object_job(i, self.job_colors[i]) for i in range(self.jobs_num)]
         self.machines = [Object_machine(i, self.machine_init_moulds[i], self.machine_init_colors[i]) for i in range(self.machines_num)]
@@ -160,7 +162,8 @@ class JSSPEnv(gymnasium.Env):
 
         Machine_init_moulds = np.random.choice(list(range(Moulds_num)), Machines_num)
         Machine_init_colors = np.array([int(np.random.uniform(low=0, high=self.parameters["Mcolor_coefficient"])) for _ in range(Machines_num)])
-
+        
+        # 订单数，模具数，机器数，订单对应工序对应机器对应执行时间，订单到达时间，订单交付时间，订单颜色， 模具类型，机器初始模具，机器初始颜色
         return Jobs_num, Moulds_num, Machines_num, Processing_time, J_Arrive_list, J_Delivery_list, Job_colors, Moulds_types, Machine_init_moulds, Machine_init_colors
 
     def reset(self)->np.ndarray:
