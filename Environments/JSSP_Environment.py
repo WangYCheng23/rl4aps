@@ -10,6 +10,98 @@ class JSSPEnv(gymnasium.Env):
         self.parameters = parameters
         self.observation_space = gymnasium.spaces.Box(shape=(1,10), dtype=np.float64)
         self.action_space = gymnasium.spaces.Box(shape=(1,3), dtype=np.int32)   # 订单，模具，机器
+
+    def reset(self)->np.ndarray:
+        """
+        Reset Env
+        """
+        self.count_steps = 0
+        self.construct_scene()
+        obs = np.zeros(10).unsqueeze()
+        self.old_obs = obs
+        return obs  
+
+    def step(self, action: np.ndarray):
+        """
+        Step Env
+        """
+        self.count_steps += 1
+        self.schedule(action)
+        obs = self.extract_features()
+        reward_info, reward = self.cal_reward(self.old_obs, obs.unsequeeze())
+        self.old_obs = obs
+        terminal = True if self.count_steps==self.jobs_num-1 else False
+        return obs, reward, terminal, reward_info
+
+    def cal_reward(self, old_obs, next_obs):
+        """
+        :param Std_C_J_t: Tard_a(t)   t时刻的实际迟到率
+        :param Mean_C_J_t: Tard_e(t)   t时刻的预估迟延率
+        :param Std_C_J_t1: Tard_a(t+1)  t+1时刻的实际迟到率
+        :param Mean_C_J_t1: Tard_e(t+1)  t+1时刻的预估迟延率
+        :param Mean_U_t: U_ave(t)     t时刻的机器平均利用率
+        :param Mean_U_t1: U_ave(t+1)  t+1时刻的机器平均利用率
+        """
+        Std_C_J_t, Mean_C_J_t, Mean_U_t, MhCH_t, MdCH_t = old_obs[0][5], old_obs[0][4], old_obs[0][0], old_obs[0][8], old_obs[0][9]
+        Std_C_J_t1, Mean_C_J_t1, Mean_U_t1, MhCH_t1, MdCH_t1 = next_obs[0][5], next_obs[0][4], next_obs[0][0], next_obs[0][8], next_obs[0][9] 
+
+        reward_prime = Std_C_J_t1*2 + MhCH_t1
+        reward =   Std_C_J_t*2  + MhCH_t
+
+        if reward_prime < reward:
+            rt = 4
+            tout = '延迟换模 奖励4'
+        elif reward_prime > reward:
+            rt = -4
+            tout = '延迟换模 惩罚-4'
+        else:
+            if Mean_C_J_t1<Mean_C_J_t:
+                rt = 1
+                tout = '预估延迟率 奖励'
+            else:
+                if Mean_C_J_t1>Mean_C_J_t:
+                    rt =-1
+                    tout = '预估延迟率 惩罚'
+                else:
+                    if MdCH_t1 < MdCH_t:
+                        rt = 1
+                        tout = '模具换模率 奖励'
+                    else:
+                        if MdCH_t1 > MdCH_t:
+                            rt = -1
+                            tout = '模具换模率 惩罚'
+                        else:
+                            if Mean_U_t1>Mean_U_t:
+                                rt=1
+                                tout = '机器利用率 奖励'
+                            else:
+                                if Mean_U_t1>0.95*Mean_U_t:
+                                    rt=0
+                                    tout = '机器利用率 不变'
+                                else:
+                                    rt=-1
+                                    tout = '机器利用率 惩罚'
+        return tout, rt
+    
+    def extract_features(self):
+        """
+        Extract features for Agent to Observe
+        """
+        # To Do: Change to input -> Net -> output
+        Avg_Utlization_Mh = np.mean(self.utilization_Mh)
+        Std_Utlization_Mh = np.std(self.utilization_Mh)
+        Avg_Utlization_Md = np.mean(self.utilization_Md)
+        Std_Utlization_Md = np.std(self.utilization_Md)
+        Avg_Complete_Jobs = np.mean(self.complete_procedures_J)
+        Std_Complete_Jobs = np.std(self.complete_procedures_J)
+
+        Avg_Complete_Machines = np.mean(self.compleMean_C_J_time_endMh)
+        
+        machine_change_rate = 0
+        mould_change_rate = 0
+        # 机器平均利用率, 机器的使用率标准差, 模具平均利用率, 模具的使用率标准差, 平均工件工序完成率, 工件工序完成率标准差
+        # 未完成工件的预估迟延率, 实际的迟到率, 机器换模率, 模具换模率
+        return Avg_Utlization_Mh, Std_Utlization_Mh, Avg_Utlization_Md, Std_Utlization_Md, Avg_Complete_Jobs, Std_Complete_Jobs
     
     def schedule(self, decisions):
         """
@@ -78,41 +170,12 @@ class JSSPEnv(gymnasium.Env):
         # Update
         assert len(self.machines[Machine_idx].End) > 0
         assert len(self.moulds[Mould_idx].End) > 0
-        self.complete_time_endMh[Machine_idx] = max(self.machines[Machine_idx].End)
-        self.utilization_Mh[Machine_idx] = sum(self.machines[Machine_idx].T)/self.complete_time_endMh[Machine_idx]
-        self.complete_time_endMd[Mould_idx] = max(self.moulds[Mould_idx].End)
+        self.compleMean_C_J_time_endMh[Machine_idx] = max(self.machines[Machine_idx].End)
+        self.utilization_Mh[Machine_idx] = sum(self.machines[Machine_idx].T)/self.compleMean_C_J_time_endMh[Machine_idx]
+        self.compleMean_C_J_time_endMd[Mould_idx] = max(self.moulds[Mould_idx].End)
         self.utilization_Md[Mould_idx] = sum(self.moulds[Mould_idx])
         self.complete_procedures_J[Job_idx] += 1
         assert self.complete_procedures_J[Job_idx] <= 1
-
-    def extract_features(self):
-        """
-        Extract features for Agent to Observe
-        """
-        # To Do: Change to input -> Net -> output
-        Avg_Utlization_Mh = np.mean(self.utilization_Mh)
-        Std_Utlization_Mh = np.std(self.utilization_Mh)
-        Avg_Utlization_Md = np.mean(self.utilization_Md)
-        Std_Utlization_Md = np.std(self.utilization_Md)
-        Avg_Complete_Jobs = np.mean(self.complete_procedures_J)
-        Std_Complete_Jobs = np.std(self.complete_procedures_J)
-
-        Avg_Complete_Machines = np.mean(self.complete_time_endMh)
-        
-        # 机器平均利用率, 机器的使用率标准差, 模具平均利用率, 模具的使用率标准差, 平均工件工序完成率, 工件工序完成率标准差
-        # 未完成工件的预估迟延率, 实际的迟到率, 机器换模率, 模具换模率
-        return Avg_Utlization_Mh, Std_Utlization_Mh, Avg_Utlization_Md, Std_Utlization_Md, Avg_Complete_Jobs, Std_Complete_Jobs
-
-    def step(self, action: np.ndarray):
-        """
-        Step Env
-        """
-        self.count_steps += 1
-        self.schedule(action)
-        obs = self.extract_features()
-        reward = self.cal_reward(obs.unsequeeze())
-        terminal = True if self.count_steps==self.jobs_num-1 else False
-        return obs, reward, terminal, {}
 
     def construct_scene(self):
         """
@@ -120,9 +183,9 @@ class JSSPEnv(gymnasium.Env):
         """
         self.jobs_num, self.moulds_num, self.machines_num, self.processing_time, self.job_arrive_list, self.job_delivery_list, \
             self.job_colors, self.moulds_types, self.machine_init_moulds, self.machine_init_colors = self.instance_generator()
-        self.complete_time_endMh = np.zeros(self.machines_num)  #各机器最后一道工序完工时间
+        self.compleMean_C_J_time_endMh = np.zeros(self.machines_num)  #各机器最后一道工序完工时间
         self.utilization_Mh = np.zeros(self.machines_num)   #机器利用率
-        self.complete_time_endMd = np.zeros(self.moulds_num)    #各模具最后一道工序完工时间
+        self.compleMean_C_J_time_endMd = np.zeros(self.moulds_num)    #各模具最后一道工序完工时间
         self.utilization_Md = np.zeros(self.moulds_num) #模具利用率
         self.complete_procedures_J = np.zeros(self.jobs_num)    #各工件的已加工工序数列表
 
@@ -165,15 +228,6 @@ class JSSPEnv(gymnasium.Env):
         
         # 订单数，模具数，机器数，订单对应工序对应机器对应执行时间，订单到达时间，订单交付时间，订单颜色，模具类型，机器初始模具，机器初始颜色
         return Jobs_num, Moulds_num, Machines_num, Processing_time, J_Arrive_list, J_Delivery_list, Job_colors, Moulds_types, Machine_init_moulds, Machine_init_colors
-
-    def reset(self)->np.ndarray:
-        """
-        Reset Env
-        """
-        self.count_steps = 0
-        self.construct_scene()
-        obs = np.zeros(10).unsqueeze()
-        return obs
 
     def render(self):
         pass    
