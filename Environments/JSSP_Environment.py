@@ -9,7 +9,7 @@ class JSSPEnv(gymnasium.Env):
         super().__init__()
         self.parameters = parameters
         self.observation_space = gymnasium.spaces.Box(shape=(1,10), dtype=np.float64)
-        self.action_space = gymnasium.spaces.Box(shape=(1,3), dtype=np.int32)
+        self.action_space = gymnasium.spaces.Box(shape=(1,3), dtype=np.int32)   # 订单，模具，机器
     
     def schedule(self, decisions):
         """
@@ -163,7 +163,7 @@ class JSSPEnv(gymnasium.Env):
         Machine_init_moulds = np.random.choice(list(range(Moulds_num)), Machines_num)
         Machine_init_colors = np.array([int(np.random.uniform(low=0, high=self.parameters["Mcolor_coefficient"])) for _ in range(Machines_num)])
         
-        # 订单数，模具数，机器数，订单对应工序对应机器对应执行时间，订单到达时间，订单交付时间，订单颜色， 模具类型，机器初始模具，机器初始颜色
+        # 订单数，模具数，机器数，订单对应工序对应机器对应执行时间，订单到达时间，订单交付时间，订单颜色，模具类型，机器初始模具，机器初始颜色
         return Jobs_num, Moulds_num, Machines_num, Processing_time, J_Arrive_list, J_Delivery_list, Job_colors, Moulds_types, Machine_init_moulds, Machine_init_colors
 
     def reset(self)->np.ndarray:
